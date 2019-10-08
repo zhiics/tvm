@@ -104,3 +104,160 @@ def external_multiply(attrs, args, compiler):
     """Check if the external compiler should be used.
     """
     return get_extern_op(compiler, 'multiply')(attrs, args)
+
+@reg.register_extern_op("sigmoid")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'sigmoid')(attrs, args)
+
+@reg.register_extern_op("tanh")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'tanh')(attrs, args)
+
+@reg.register_extern_op("clip")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'clip')(attrs, args)
+
+@reg.register_extern_op("nn.leaky_relu")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'leaky_relu')(attrs, args)
+
+@reg.register_extern_op("nn.softmax")
+def external_batch_norm(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'softmax')(attrs, args)
+
+@reg.register_extern_op("nn.bias_add")
+def external_batch_norm(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'bias_add')(attrs, args)
+
+@reg.register_extern_op("subtract")
+def external_batch_norm(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'subtract')(attrs, args)
+
+@reg.register_extern_op("divide")
+def external_batch_norm(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'divide')(attrs, args)
+
+@reg.register_extern_op("power")
+def external_batch_norm(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'power')(attrs, args)
+
+@reg.register_extern_op("nn.max_pool2d")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'max_pool2d')(attrs, args)
+
+@reg.register_extern_op("nn.avg_pool2d")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'avg_pool2d')(attrs, args)
+
+@reg.register_extern_op("nn.global_max_pool2d")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'global_max_pool2d')(attrs, args)
+
+@reg.register_extern_op("nn.global_avg_pool2d")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'global_avg_pool2d')(attrs, args)
+
+@reg.register_extern_op("exp")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'exp')(attrs, args)
+
+@reg.register_extern_op("log")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'log')(attrs, args)
+
+@reg.register_extern_op("sqrt")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'sqrt')(attrs, args)
+
+@reg.register_extern_op("abs")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'abs')(attrs, args)
+
+@reg.register_extern_op("negative")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'negative')(attrs, args)
+
+@reg.register_extern_op("sin")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'sin')(attrs, args)
+
+@reg.register_extern_op("cos")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'cos')(attrs, args)
+
+@reg.register_extern_op("atan")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'atan')(attrs, args)
+
+@reg.register_extern_op("ceil")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'ceil')(attrs, args)
+
+@reg.register_extern_op("floor")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'floor')(attrs, args)
+
+@reg.register_extern_op("nn.batch_flatten")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'batch_flatten')(attrs, args)
+
+@reg.register_extern_op("expand_dims")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'expand_dims')(attrs, args)
+
+@reg.register_extern_op("concatenate")
+def external_multiply(attrs, args, compiler):
+    """Check if the external compiler should be used.
+    """
+    return get_extern_op(compiler, 'concatenate')(attrs, args)
+
