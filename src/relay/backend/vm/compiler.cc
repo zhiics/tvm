@@ -880,7 +880,7 @@ void VMCompiler::Compile(const Module& mod_ref,
   for (auto gv : context_.global_map) {
     vm_->global_map.insert({gv.first->name_hint, gv.second});
   }
-  
+
   ExternalFuncCodegen();
 }
 
