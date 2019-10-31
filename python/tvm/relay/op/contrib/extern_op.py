@@ -141,12 +141,6 @@ def external_batch_norm(attrs, args, compiler):
     """
     return get_extern_op(compiler, 'bias_add')(attrs, args)
 
-@reg.register_extern_op("subtract")
-def external_batch_norm(attrs, args, compiler):
-    """Check if the external compiler should be used.
-    """
-    return get_extern_op(compiler, 'subtract')(attrs, args)
-
 @reg.register_extern_op("divide")
 def external_batch_norm(attrs, args, compiler):
     """Check if the external compiler should be used.

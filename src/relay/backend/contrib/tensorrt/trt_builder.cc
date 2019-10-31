@@ -37,7 +37,6 @@ static const std::unordered_map<std::string, TrtOpConverter*>
         {"nn.batch_norm", new BatchNormOpConverter()},
         {"nn.softmax", new SoftmaxOpConverter()},
         {"nn.conv2d", new Conv2DOpConverter()},
-        // {"conv2d_transpose", AddDeconvolution},
         {"nn.dense", new DenseOpConverter()},
         {"nn.bias_add", new BiasAddOpConverter()},
         {"add", new ElementWiseBinaryOpConverter()},
@@ -62,6 +61,7 @@ static const std::unordered_map<std::string, TrtOpConverter*>
         {"nn.batch_flatten", new BatchFlattenOpConverter()},
         {"expand_dims", new ExpandDimsOpConverter()},
         {"concatenate", new ConcatOpConverter()},
+        {"conv2d_transpose", new Conv2DTransposeOpConverter()},
         // {"slice_like", AddSliceLike},
 };
 
@@ -81,6 +81,7 @@ TrtBuilder::TrtBuilder(const std::vector<DLTensor*>& args)
 
 TrtEngineAndContext TrtBuilder::BuildEngine(const Expr& expr) {
   // Process graph and create INetworkDefinition.
+  LOG(INFO) << AsText(expr);
   VisitExpr(expr);
   // Mark outputs.
   auto network_outputs = node_output_map_[expr.operator->()];

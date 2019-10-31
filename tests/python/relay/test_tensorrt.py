@@ -49,6 +49,50 @@ def test_extern_tensorrt():
 
     print('Test passed.')
 
+def test_extern_tensorrt_maskrcnn(use_trt=True, profile=False, num_iteration=1000):
+    if profile:
+        import ctypes
+        _cudart = ctypes.CDLL('libcudart.so')
+
+    dtype = 'float32'
+    input_shape = (1, 3, 224, 224)
+    from gluoncv import model_zoo
+    block = model_zoo.get_model('mask_rcnn_fpn_resnet50_v1b_coco', pretrained=True)
+    mod, params = relay.frontend.from_mxnet(block, shape={'data': input_shape}, dtype=dtype)
+
+    if use_trt:
+        mod['main'] = WholeGraphAnnotator('tensorrt').visit(mod['main'])
+        mod = relay.transform.PartitionGraph()(mod)
+        graph, lib, params = relay.build(mod, "cuda", params=params)
+    else:
+        with relay.build_config(opt_level=3):
+            graph, lib, params = relay.build(mod, "cuda", params=params)
+
+    i_data = np.random.uniform(0, 1, input_shape).astype(dtype)
+
+    mod = graph_runtime.create(graph, lib, ctx=tvm.gpu(0))
+    mod.set_input(**params)
+    # Warmup
+    for i in range(10):
+        mod.run(data=i_data)
+
+    # Start profiling
+    if profile:
+        ret = _cudart.cudaProfilerStart()
+        if ret != 0:
+            raise Exception("cudaProfilerStart() returned %d" % ret)
+
+    # Time
+    times = []
+    for i in range(num_iteration):
+        start_time = time.time()
+        mod.run(data=i_data)
+        res = mod.get_output(0)
+        times.append(time.time() - start_time)
+    latency = 1000.0 * np.mean(times)
+    print(model, latency)
+    return latency
+
 def test_extern_tensorrt_graph_runtime_perf(model, use_trt=False, profile=False, num_iteration=1000):
     if profile:
         import ctypes
@@ -140,6 +184,8 @@ def test_extern_tensorrt_perf(model='resnet50_v1', use_trt=True, profile=False, 
     return latency
 
 if __name__ == "__main__":
+    test_extern_tensorrt_maskrcnn()
+    exit(0)
     latency = {}
     models = [
         'alexnet',

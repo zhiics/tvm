@@ -56,7 +56,9 @@ class TrtOpConverter {
                  bool variable_input_count = false)
       : input_types(input_types), variable_input_count(variable_input_count) {}
 
-  // Convert to TRT.
+  // Convert to TRT. Implementation should use inputs and attributes from the
+  // CallNode to add the corresponding TRT layers to network. Outputs should be
+  // pushed to outputs vector.
   virtual void Convert(AddTrtLayerParams& params) const = 0;
 
   // Helper functions.
@@ -474,6 +476,42 @@ class BiasAddOpConverter : public TrtOpConverter {
       output_tensor = Reshape(params, output_tensor, input_dims);
     }
     params.outputs.push_back(output_tensor);
+  }
+};
+
+class Conv2DTransposeOpConverter : public TrtOpConverter {
+ public:
+  Conv2DTransposeOpConverter() : TrtOpConverter({kTensor, kWeight}) {}
+
+  void Convert(AddTrtLayerParams& params) const {
+    auto input_tensor = params.inputs.at(0).tensor;
+    auto input_dims = TrtDimsToVector(input_tensor->getDimensions());
+    auto weight_shape = params.inputs.at(1).weight_shape;
+    const auto* conv2d_attr = params.call->attrs.as<Conv2DTransposeAttrs>();
+    CHECK(conv2d_attr->data_layout == "NCHW");
+    CHECK(conv2d_attr->out_layout == "" || conv2d_attr->out_layout == "NCHW");
+    CHECK(conv2d_attr->kernel_layout == "OIHW");
+    CHECK(conv2d_attr->dilation[0].as<IntImm>()->value == 1 &&
+          conv2d_attr->dilation[1].as<IntImm>()->value == 1);
+
+    // Could use conv2d_attr->channels.as<IntImm>()->value
+    const int num_outputs = weight_shape[0];
+    const auto kernel_size = nvinfer1::DimsHW(weight_shape[2], weight_shape[3]);
+    nvinfer1::Weights bias{nvinfer1::DataType::kFLOAT, nullptr, 0};
+    auto deconv_layer =
+        params.network->addDeconvolution(*input_tensor, num_outputs, kernel_size,
+                                         params.inputs.at(1).weight, bias);
+    CHECK(deconv_layer != nullptr);
+    const auto padding =
+        nvinfer1::DimsHW(conv2d_attr->padding[0].as<IntImm>()->value,
+                         conv2d_attr->padding[1].as<IntImm>()->value);
+    deconv_layer->setPadding(padding);
+    const auto strides =
+        nvinfer1::DimsHW(conv2d_attr->strides[0].as<IntImm>()->value,
+                         conv2d_attr->strides[1].as<IntImm>()->value);
+    deconv_layer->setStride(strides);
+    deconv_layer->setNbGroups(conv2d_attr->groups);
+    params.outputs.push_back(deconv_layer->getOutput(0));
   }
 };
 
