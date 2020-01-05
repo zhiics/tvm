@@ -763,7 +763,9 @@ def _tensor_array_scatter():
 
 def _tensor_array_gather():
     def _impl(inputs, attr, params, prelude):
-        return prelude.tensor_array_gather(inputs[2], inputs[1])
+        dtype_str = attr.get('dtype').name
+        tensor_array_gather_func = prelude.get_var("tensor_array_gather", dtype_str)
+        return tensor_array_gather_func(inputs[2], inputs[1])
     return _impl
 
 def _tensor_array_size():

@@ -892,7 +892,7 @@ def test_tensor_array_scatter():
     def run(dtype):
         mod = relay.Module()
         p = Prelude(mod)
-        
+
         # tensor array
         v1 = relay.var('v1')
         v2 = relay.var('v2')
@@ -938,6 +938,43 @@ def test_tensor_array_scatter():
     run('int32')
 
 
+def test_tensor_array_gather():
+    def run(dtype):
+        mod = relay.Module()
+        p = Prelude(mod)
+
+        # tensor array
+        v1 = relay.var('v1')
+        v2 = relay.var('v2')
+        v3 = relay.var('v2')
+        tensor_array = p.get_var('tensor_array', dtype)
+        tensor_array1 = tensor_array(relay.const(3))
+        write_func = p.get_var('tensor_array_write', dtype)
+        gather_func = p.get_var('tensor_array_gather', dtype)
+        tensor2 = p.get_var('tensor2', dtype)
+        tensor_array1 = write_func(tensor_array1, relay.const(0), tensor2(v1))
+        tensor_array1 = write_func(tensor_array1, relay.const(1), tensor2(v2))
+        tensor_array1 = write_func(tensor_array1, relay.const(2), tensor2(v3))
+
+        # indices array
+        index = relay.var('index')
+
+        # create the scatter function
+        tensor_array_gather = gather_func(tensor_array1, index)
+        mod["main"] = relay.Function([v1, v2, v3, index], tensor_array_gather)
+
+        # initialize and check
+        v1_data = np.random.uniform(low=0.0, high=8.0, size=(2, 3)).astype(dtype)
+        v2_data = np.random.uniform(low=0.0, high=8.0, size=(2, 3)).astype(dtype)
+        v3_data = np.random.uniform(low=0.0, high=8.0, size=(2, 3)).astype(dtype)
+        index_data = np.array([0, 1], dtype="int32")
+        expected = [[v1_data, v2_data]]
+        check_tensor_array(mod, expected, *(v1_data, v2_data, v3_data,
+                                            index_data), dtype=dtype)
+    run('float32')
+    run('int32')
+
+
 if __name__ == "__main__":
     test_nat_constructor()
     test_double()
@@ -972,3 +1009,4 @@ if __name__ == "__main__":
     test_tensor_concatenate()
     test_tensor_array_concat()
     test_tensor_array_scatter()
+    test_tensor_array_gather()

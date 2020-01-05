@@ -640,8 +640,7 @@ class TensorArrayOps(object):
         self.define_tensor_array_split()
         self.define_tensor_array_concat()
         self.define_tensor_array_stack()
-        # TODO(wweic): Gather fails in PartialEvaluate
-        # self.define_tensor_array_gather()
+        self.define_tensor_array_gather()
 
 class Prelude:
     """Contains standard definitions."""
