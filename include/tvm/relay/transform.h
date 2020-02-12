@@ -317,6 +317,17 @@ TVM_DLL Pass PrintIR(bool show_meta_data = true);
  */
 TVM_DLL Pass PartitionGraph();
 
+/*!
+ * \brief Remove the unused functions in a module. This reduces the compilation
+ * time for large programs as prelude may insert many functions that are not
+ * necessarily used.
+ *
+ * \param entry_functions The list of functions to start traversal.
+ *
+ * \return The pass.
+ */
+Pass RemoveUnusedFunctions(Array<tvm::PrimExpr> entry_functions);
+
 }  // namespace transform
 
 /*!

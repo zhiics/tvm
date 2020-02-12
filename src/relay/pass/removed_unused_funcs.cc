@@ -18,7 +18,7 @@
  */
 
 /*!
- * \file tvm/relay/backend/vm/remove_unused_funcs.cc
+ * \file tvm/relay/pass/remove_unused_funcs.cc
  * \brief Remove unused global relay functions in a relay module.
  */
 
@@ -34,7 +34,6 @@
 
 namespace tvm {
 namespace relay {
-namespace vm {
 
 /**
  * \brief Detects all the functions that can be possibly called by entry function.
@@ -104,14 +103,12 @@ IRModule RemoveUnusedFunctions(const IRModule& module,
   return module;
 }
 
-}  // namespace vm
-
 namespace transform {
 
 Pass RemoveUnusedFunctions(Array<tvm::PrimExpr> entry_functions) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =
     [=](IRModule m, PassContext pc) {
-    return relay::vm::RemoveUnusedFunctions(m, entry_functions);
+    return relay::RemoveUnusedFunctions(m, entry_functions);
   };
   return CreateModulePass(pass_func, 1, "RemoveUnusedFunctions", {});
 }
