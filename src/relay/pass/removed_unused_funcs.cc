@@ -23,59 +23,15 @@
  */
 
 #include <tvm/relay/expr.h>
-#include <tvm/relay/expr_functor.h>
-#include <tvm/support/logging.h>
-#include <tvm/relay/analysis.h>
 #include <tvm/relay/transform.h>
-#include <tvm/runtime/vm.h>
-#include <iostream>
+#include <algorithm>
 #include <unordered_set>
 #include <vector>
 
+#include "call_graph.h"
+
 namespace tvm {
 namespace relay {
-
-/**
- * \brief Detects all the functions that can be possibly called by entry function.
- */
-struct CallTracer : ExprVisitor {
-  IRModule module_;
-
-  // Record the names of all encountered functions
-  std::unordered_set<std::string> called_funcs_;
-
-  // Record the expressions that are being visited
-  std::unordered_set<Expr, ObjectHash, ObjectEqual> visiting_;
-
-  explicit CallTracer(const IRModule& module)
-    : module_{module},
-      called_funcs_{},
-      visiting_{} {}
-
-  void VisitExpr_(const GlobalVarNode* op) final {
-    called_funcs_.insert(op->name_hint);
-    auto func = module_->Lookup(op->name_hint);
-    VisitExpr(func);
-  }
-
-  void VisitExpr_(const FunctionNode* func_node) final {
-    auto func = GetRef<Function>(func_node);
-    if (visiting_.find(func) == visiting_.end()) {
-      visiting_.insert(func);
-      for (auto param : func_node->params) {
-        ExprVisitor::VisitExpr(param);
-      }
-      ExprVisitor::VisitExpr(func_node->body);
-    }
-  }
-
-  std::unordered_set<std::string> Trace(const std::string& entry) {
-    called_funcs_.insert(entry);
-    auto main_func = module_->Lookup(entry);
-    VisitExpr(main_func);
-    return called_funcs_;
-  }
-};
 
 /*!
  * \brief Remove functions that are not used.
@@ -86,21 +42,32 @@ struct CallTracer : ExprVisitor {
  * \return The module with dead functions removed.
  */
 IRModule RemoveUnusedFunctions(const IRModule& module,
-                             Array<tvm::PrimExpr> entry_funcs) {
-  std::unordered_set<std::string> called_funcs{};
+                               Array<tvm::PrimExpr> entry_funcs) {
+  // Create a CallGraph.
+  CallGraph cg(module);
+  std::unordered_set<CallGraphNode*> called_funcs;
   for (auto entry : entry_funcs) {
     auto* str_name = entry.as<tir::StringImmNode>();
-    auto funcs = CallTracer(module).Trace(str_name->value);
-    called_funcs.insert(funcs.cbegin(), funcs.cend());
-  }
-  auto existing_functions = module->functions;
-  for (auto f : existing_functions) {
-    auto it = called_funcs.find(f.first->name_hint);
-    if (it == called_funcs.end()) {
-      module->Remove(f.first);
+    if (module->ContainGlobalVar(str_name->value)) {
+      const GlobalVar& gv = module->GetGlobalVar(str_name->value);
+      const CallGraphNode* cgn = cg[gv];
+      const std::vector<CallGraphNode*>& topo = cgn->TopologicalOrder();
+      called_funcs.insert(topo.begin(), topo.end());
     }
   }
-  return module;
+
+  // Remove the unused functions in the reverse topological order.
+  auto topo = cg.TopologicalOrder();
+  std::reverse(topo.begin(), topo.end());
+  for (auto* cgn : topo) {
+    if (called_funcs.find(cgn) == called_funcs.end()) {
+      // Cleanup the CallGraphNode entries.
+      cgn->CleanCallGraphEntries();
+      // Remove the GlobalVar from the IR module and update the CallGraph.
+      cg.RemoveGlobalVarFromModule(cgn, /*update_call_graph*/ true);
+    }
+  }
+  return cg.GetModule();
 }
 
 namespace transform {
