@@ -19,10 +19,12 @@
 
 /*!
  * \file tvm/relay/pass/call_graph.cc
- * \brief Implementation of API to handle the call graph of a Relay module.
+ * \brief Implementation of APIs to handle the call graph of a Relay module.
  */
 
 #include "call_graph.h"
+
+#include <tvm/relay/expr_functor.h>
 #include <algorithm>
 #include <vector>
 #include <unordered_set>
@@ -35,20 +37,31 @@ CallGraph::CallGraph(const IRModule& module) : module_(module) {
   for (const auto& it : gvar_funcs) {
     if (const auto* fn = it.second.as<FunctionNode>()) {
       auto func = GetRef<Function>(fn);
-      cur_gv_ = it.first;
       // Add the global function to gradually build up the CallGraph.
-      AddToCallGraph(func);
-      // Cleanup the cached items for each invocation of a global function.
-      visit_counter_.clear();
+      AddToCallGraph(it.first, func);
     }
   }
 }
 
-void CallGraph::AddToCallGraph(const Function& func) {
-  CHECK(func.defined() && cur_gv_.defined());
+void CallGraph::AddToCallGraph(const GlobalVar& gv, const Function& func) {
+  CHECK(func.defined() && gv.defined());
   // Add the current global function as an entry to the CallGraph.
-  LookupGlobalVar(cur_gv_);
-  ExprVisitor::VisitExpr(func);
+  CallGraphNode* cg_node = LookupGlobalVar(gv);
+
+  // Only GlobalVar nodes need to be handled in a function. It indicates that
+  // the global function of a callee is called by the function that is being
+  // processed. An edge will be added from the current global function, cg_node,
+  // to the node that contains the found callee GlobalVarNode.
+  //
+  // This is the major overhead for constructing a call graph because the
+  // post-order visitor will visit each AST node of the current function to
+  // figure out the dependencies between functions.
+  PostOrderVisit(func, [&](const Expr& expr) {
+    if (const GlobalVarNode* gvn = expr.as<GlobalVarNode>()) {
+      auto callee = GetRef<GlobalVar>(gvn);
+      cg_node->AddCalledGlobal(LookupGlobalVar(callee));
+    }
+  });
 }
 
 const CallGraphNode* CallGraph::operator[](const GlobalVar& gv) const {
@@ -70,24 +83,16 @@ CallGraphNode* CallGraph::operator[](const GlobalVar& gv) {
 CallGraphNode* CallGraph::LookupGlobalVar(const GlobalVar& gv) {
   CHECK(gv.defined());
 
+  // This inserts an element to the call graph if it is not there yet.
   auto& call_graph_node = call_graph_[gv];
   if (call_graph_node) return call_graph_node.get();
 
   CHECK(module_->ContainGlobalVar(gv->name_hint))
       << "GlobalVar " << gv->name_hint << " not found in the current ir module";
 
+  // Create the node for the inserted entry.
   call_graph_node = std::unique_ptr<CallGraphNode>(new CallGraphNode(gv));
   return call_graph_node.get();
-}
-
-// Only GlobalVar nodes need to be handled in a function. It indicates that the
-// global function represented by `gvn` is called by the function that is being
-// processed. An edge will be added from the node that stores `cur_gv_` to the
-// node that contains `gvn`.
-void CallGraph::VisitExpr_(const GlobalVarNode* gvn) {
-  CallGraphNode* cg_node = LookupGlobalVar(cur_gv_);
-  auto callee = GetRef<GlobalVar>(gvn);
-  cg_node->AddCalledGlobal(LookupGlobalVar(callee));
 }
 
 void CallGraph::Print(std::ostream& os) const {
@@ -98,10 +103,13 @@ void CallGraph::Print(std::ostream& os) const {
   }
 }
 
-GlobalVar CallGraph::RemoveGlobalVarFromModule(CallGraphNode* cg_node, bool update_call_graph) {
+GlobalVar CallGraph::RemoveGlobalVarFromModule(CallGraphNode* cg_node,
+                                               bool update_call_graph) {
   CHECK(cg_node->empty() || (cg_node->IsRecursive() && cg_node->size() == 1))
       << "Cannot remove global var " << cg_node->GetNameHint()
-      << " from call graph, because it calls other global functions";
+      << " from call graph, because it still calls "
+      << cg_node->size() << " other global functions";
+
   if (update_call_graph) {
     // Update the CallGraph by removing all edges that point to the node
     // `cg_node`.
@@ -130,12 +138,12 @@ std::vector<CallGraphNode*> CallGraph::GetEntryGlobals() const {
 
 std::vector<CallGraphNode*> CallGraph::TopologicalOrder() const {
   std::vector<CallGraphNode*> ret;
-  // Collect all entry nodes
+  // Collect all entry nodes.
   std::vector<CallGraphNode*> entries = GetEntryGlobals();
   CallGraphNode::CallGraphNodeSet visited;
 
   for (const auto& it : entries) {
-    // Keep track of the nodes that have been visited.
+    // Keep tracking the nodes that have been visited.
     auto topo = it->TopologicalOrder(&visited);
     // Preprend the collected items. The intermeidate nodes that are shared by
     // multiple entries are guaranteed to be collected when visiting the
@@ -143,7 +151,7 @@ std::vector<CallGraphNode*> CallGraph::TopologicalOrder() const {
     ret.insert(ret.begin(), topo.begin(), topo.end());
   }
 
-  // Find out the missing global functions if there is any.
+  // Find out the missing global functions if there are any to help debugging.
   if (ret.size() != module_->functions.size()) {
     for (auto it : module_->functions) {
       if (visited.find((*this)[it.first]) == visited.end()) {
@@ -162,7 +170,7 @@ std::vector<CallGraphNode*> CallGraph::TopologicalOrder() const {
 // A BSF traverser is used to collect the nodes in a CallGraphNode. The nodes
 // that are visited by previous CallGraphNode entries can be memoized. This
 // helps us to make sure no entry will be visited multiple times when collecting
-// the nodes for an entir CallGraph.
+// the nodes for an entir call graph.
 std::vector<CallGraphNode*> CallGraphNode::TopologicalOrder(
     CallGraphNodeSet* visited) const {
   std::vector<CallGraphNode*> ret;
@@ -201,6 +209,8 @@ void CallGraphNode::CleanCallGraphEntries() {
 
 inline void CallGraphNode::AddCalledGlobal(CallGraphNode* cg_node) {
   called_globals_.emplace_back(global_, cg_node);
+  // Increment the reference to indicate that another call site is found for
+  // the callee in `cg_node`.
   cg_node->IncRef();
   // Mark the global function as recursive if it calls itself.
   if (global_ == cg_node->GetGlobalVar()) {
@@ -208,6 +218,22 @@ inline void CallGraphNode::AddCalledGlobal(CallGraphNode* cg_node) {
   }
 }
 
+// Remove an edge from the current global function to the callee.
+void CallGraphNode::RemoveCallTo(const GlobalVar& callee) {
+  for (auto it = begin();; ++it) {
+    CHECK(it != end()) << "Cannot find global function "
+                       << callee->name_hint << " to remove!";
+    if (it->second->GetGlobalVar() == callee) {
+      // Only remove one occurrence of the call site.
+      it->second->DecRef();
+      *it = called_globals_.back();
+      called_globals_.pop_back();
+      return;
+    }
+  }
+}
+
+// Remove all edges from the current global function to the callee.
 void CallGraphNode::RemoveAllCallTo(CallGraphNode* callee) {
   for (uint32_t i = 0, e = size(); i != e;) {
     if (called_globals_[i].second == callee) {
@@ -219,6 +245,10 @@ void CallGraphNode::RemoveAllCallTo(CallGraphNode* callee) {
       ++i;
     }
   }
+  // Make sure all references to the callee are removed.
+  CHECK_EQ(callee->GetRefCount(), 0U)
+      << "All references to " << callee->GetNameHint()
+      << " should have been removed";
 }
 
 void CallGraphNode::Print(std::ostream& os) const {
@@ -227,14 +257,14 @@ void CallGraphNode::Print(std::ostream& os) const {
     return;
   }
 
-  os << "Call graph node for " << global_->name_hint;
-  os << "<<" << this << ">>  #refs = " << GetRefCount() << '\n';
+  os << "Call graph node: " << global_->name_hint;
+  os << " at: " << this << ",  #refs = " << GetRefCount() << "\n";
 
   for (const auto& it : *this) {
     os << "  call site: <" << it.first->name_hint << "> calls ";
     os << it.second->GetNameHint() << "\n";
   }
-  os << '\n';
+  os << "\n";
 }
 
 std::ostream& operator<<(std::ostream& os, const CallGraph& cg) {

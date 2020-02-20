@@ -29,12 +29,12 @@
 #define TVM_RELAY_PASS_CALL_GRAPH_H_
 
 #include <tvm/relay/expr.h>
-#include <tvm/relay/expr_functor.h>
-#include <tvm/ir/transform.h>
+#include <tvm/ir/module.h>
 #include <memory.h>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace tvm {
@@ -47,7 +47,7 @@ class CallGraphNode;
  * provides a variety of utility functions for users to query, view, and update
  * a call graph.
  */
-class CallGraph : public ExprVisitor {
+class CallGraph {
   using CallGraphMap =
       std::unordered_map<GlobalVar, std::unique_ptr<CallGraphNode>, ObjectHash,
                          ObjectEqual>;
@@ -62,8 +62,6 @@ class CallGraph : public ExprVisitor {
    * \param module The IR module
    */
   explicit CallGraph(const IRModule& module);
-  /*! \brief Override the function to handle GlobalVarNode. */
-  void VisitExpr_(const GlobalVarNode* gvn) final;
 
   /*!
    * \brief Print the call graph.
@@ -105,6 +103,26 @@ class CallGraph : public ExprVisitor {
    * \return The fetched element.
    */
   CallGraphNode* operator[](const GlobalVar& gv);
+  /*!
+   * \brief Get an element from the CallGraph using the global function name.
+   *
+   * \param gvar_name The global function name used for indexing.
+   *
+   * \return The fetched element.
+   */
+  const CallGraphNode* operator[](const std::string& gvar_name) const {
+    return (*this)[module_->GetGlobalVar(gvar_name)];
+  }
+  /*!
+   * \brief Get an element from the CallGraph using the global function name.
+   *
+   * \param gvar_name The global function name used for indexing.
+   *
+   * \return The fetched element.
+   */
+  CallGraphNode* operator[](const std::string& gvar_name) {
+    return (*this)[module_->GetGlobalVar(gvar_name)];
+  }
 
   /*! \brief Return the IR module. */
   IRModule GetModule() const {
@@ -125,11 +143,11 @@ class CallGraph : public ExprVisitor {
    * \brief Remove a GlobalVar in a given CallGraphNode from the current IR module.
    *
    * \param cg_node The CallGraphNode that contains a global function to be
-   * removed.
-   * \param  update_call_graph Indicate if we will update the CallGraph as well
-   *         since updating is costly. We are only able to remove the leaf function
-   *         when update_call_graph is disabled because the edges pointing to
-   *         functions that being removed are not updated.
+   *        removed.
+   * \param update_call_graph Indicate if we will update the CallGraph as well
+   *        since updating is costly. We are only able to remove a leaf function
+   *        when update_call_graph is disabled because the edges pointing to
+   *        functions being removed are not updated.
    *
    * \return The GlobalVar removed from the current module.
    */
@@ -147,10 +165,11 @@ class CallGraph : public ExprVisitor {
   CallGraphNode* LookupGlobalVar(const GlobalVar& gv);
 
   /*!
-   * \brief Get the entries from the CallGraph in topological order.
+   * \brief Get the entries from the CallGraph in the topological order.
    *
    *  This is useful for various module-level optimizations/analysis. For example,
-   *  inlining requires the correct order of the functions being processed.
+   *  inlining requires the correct order of the functions being processed, i.e.
+   *  callee should be always handled before callers.
    *
    * \return The list of collected entries that are sorted in the topological order.
    */
@@ -158,23 +177,20 @@ class CallGraph : public ExprVisitor {
 
  private:
   /*!
-   * \brief Create a CallGraphNode for a global function and add to the
+   * \brief Create a CallGraphNode for a global function and add it to the
    * CallGraph.
    *
-   * \param func The global function.
+   * \param gv The global var.
+   * \param func The global function corresponding to `gv`.
    */
-  void AddToCallGraph(const Function& func);
+  void AddToCallGraph(const GlobalVar& gv, const Function& func);
 
   /*! \brief The IR module for creating a CallGraph. */
   IRModule module_;
-  /*!
-   * \brief The current global function that is being used to create
-   * a CallGraphNode entry.
-   */
-  GlobalVar cur_gv_;
   /*! \brief A record contains GlobalVar to CallGraphNode mapping. */
   CallGraphMap call_graph_;
 
+  /*! \brief Overload the << operator to print a call graph. */
   friend std::ostream& operator<<(std::ostream& os, const CallGraph&);
 };
 
@@ -201,9 +217,7 @@ class CallGraphNode {
    * \brief Delete copy constructor.
    */
   CallGraphNode(const CallGraphNode&) = delete;
-  /*!
-   * \brief Delete assignment.
-   */
+  /*! \brief Delete assignment. */
   CallGraphNode& operator=(const CallGraphNode&) = delete;
 
   /*! \return The begin iterator */
@@ -228,7 +242,9 @@ class CallGraphNode {
    *
    * \return true if the list is empty. Otherwise, false.
    */
-  bool empty() const { return called_globals_.empty(); }
+  bool empty() const {
+    return called_globals_.empty();
+  }
 
   /*!
    * \brief Return the size of the list that represents the nodes are called by
@@ -270,7 +286,7 @@ class CallGraphNode {
   }
 
   /*!
-   * \brief Return the GlobalVar stored in the CallGraphNode.
+   * \brief Return the GlobalVar stored in the current CallGraphNode.
    *
    * \return The GlobalVar.
    */
@@ -333,6 +349,14 @@ class CallGraphNode {
   void AddCalledGlobal(CallGraphNode* cg_node);
 
   /*!
+   * \brief Remove a call edge to the global function from the current
+   * function.
+   *
+   * \param callee The function that is being called.
+   */
+  void RemoveCallTo(const GlobalVar& callee);
+
+  /*!
    * \brief Remove all the edges that represent that calls to the global function
    * stored in a given CallGraphNode.
    *
@@ -362,6 +386,7 @@ class CallGraphNode {
   CallGraphEntryVector called_globals_;
 
   friend class CallGraph;
+  /*! \brief Overload the << operator to print a call graph node. */
   friend std::ostream& operator<<(std::ostream& os, const CallGraphNode&);
 };
 
