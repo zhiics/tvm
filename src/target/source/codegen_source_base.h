@@ -146,15 +146,17 @@ runtime::Module CSourceModuleCreate(const String& code, const String& fmt,
 
 /*!
  * \brief Wrap the submodules in a metadata module.
- * \param params The variable to constant mapping that is collected by the host
- *        module.
  * \param dso_module The host module to be wrapped.
  * \param modules The modules to be wrapped.
+ * \param params The variable to constant mapping that is collected by the host
+ *        module.
  * \return The wrapped module.
+ * \note The params field that contains all weights will be pruned as well
+ *       so that it only contains the required weights by the runtime.
  */
-runtime::Module CreateMetadataModule(
-    const std::unordered_map<std::string, runtime::NDArray>& params,
-    const runtime::Module& dso_module, const Array<runtime::Module>& modules);
+runtime::Module CreateMetadataModule(const runtime::Module& dso_module,
+                                     const Array<runtime::Module>& modules,
+                                     std::unordered_map<std::string, runtime::NDArray>* params);
 
 /*!
  * \brief Create a source module for viewing and limited saving for device.
