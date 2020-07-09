@@ -1041,7 +1041,7 @@ void VMCompiler::Codegen() {
     exec_->lib = codegen::CSourceModuleCreate(";", "");
   }
   if (!ext_mods.empty()) {
-    exec_->lib = codegen::CreateMetadataModule(params_, exec_->lib, ext_mods);
+    exec_->lib = codegen::CreateMetadataModule(exec_->lib, ext_mods, &params_);
   }
 }
 

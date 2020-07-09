@@ -458,7 +458,7 @@ class RelayBuildModule : public runtime::ModuleNode {
     // TODO(zhiics) We should be able to completely switch to MetadataModule no
     // matter whether there are external modules or not.
     if (!ext_mods.empty()) {
-      ret_.mod = tvm::codegen::CreateMetadataModule(ret_.params, ret_.mod, ext_mods);
+      ret_.mod = tvm::codegen::CreateMetadataModule(ret_.mod, ext_mods, &ret_.params);
     }
   }
 

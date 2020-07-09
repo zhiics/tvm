@@ -45,16 +45,17 @@ using runtime::SaveBinaryToFile;
  * \brief Create a metadata module wrapper. The helper is used by different
  *        codegens, such as graph runtime codegen and the vm compiler.
  *
- * \param params The metadata for initialization of all modules.
  * \param dso_module The DSO module that contains TVM primitives.
  * \param modules The submodules that will be wrapped, e.g. CSource modules that
  *        contain vendor library calls or customized runtime modules.
+ * \param params The metadata for initialization of all modules.
  *
  * \return The created metadata module that manages initialization of metadata.
  */
-runtime::Module CreateMetadataModule(
-    const std::unordered_map<std::string, runtime::NDArray>& params,
-    const runtime::Module& dso_module, const Array<runtime::Module>& modules) {
+runtime::Module CreateMetadataModule(const runtime::Module& dso_module,
+                                     const Array<runtime::Module>& modules,
+                                     std::unordered_map<std::string, runtime::NDArray>* params) {
+  std::unordered_map<std::string, runtime::NDArray> all_params = *params;
   // Wrap all submodules in the initialization wrapper.
   std::unordered_map<std::string, std::vector<std::string>> sym_metadata;
   for (runtime::Module it : modules) {
@@ -65,7 +66,11 @@ runtime::Module CreateMetadataModule(
       Array<String> variables = pf_var();
       std::vector<std::string> arrays;
       for (size_t i = 0; i < variables.size(); i++) {
-        arrays.push_back(variables[i].operator std::string());
+        arrays.push_back(variables[i]);
+        // Remove the constant belongs to the submodule.
+        if (params->find(variables[i]) != params->end()) {
+          params->erase(variables[i]);
+        }
       }
       CHECK_EQ(sym_metadata.count(symbol), 0U) << "Found duplicated symbol: " << symbol;
       sym_metadata[symbol] = arrays;
@@ -73,7 +78,7 @@ runtime::Module CreateMetadataModule(
   }
 
   // Wrap the modules.
-  runtime::Module init_m = runtime::MetadataModuleCreate(params, sym_metadata);
+  runtime::Module init_m = runtime::MetadataModuleCreate(all_params, sym_metadata);
   init_m.Import(dso_module);
   for (const auto& it : modules) {
     init_m.Import(it);
