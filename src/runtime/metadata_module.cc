@@ -58,23 +58,36 @@ class MetadataModuleNode : public ModuleNode {
   }
 
   PackedFunc GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self) final {
-    // Initialize and memoize the module.
-    // Usually, we have some warmup runs. The module initialization should be
-    // done at this stage. Therefore, runtime overhead is not a concern.
-    if (initialized_.count(name) && !initialized_.at(name)) {
-      this->InitSubModule(name);
-      initialized_[name] = true;
-    }
+    if (name == "get_params") {
+      return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+        Array<String> vars = args[0];
+        Array<NDArray> ret;
+        for (const auto& it : vars) {
+          CHECK_GT(metadata_.count(it), 0)
+              << "Cannot find the constant param: " << it << " in the metadata module";
+          ret.push_back(metadata_[it]);
+        }
+        *rv = ret;
+      });
+    } else {
+      // Initialize and memoize the module.
+      // Usually, we have some warmup runs. The module initialization should be
+      // done at this stage. Therefore, runtime overhead is not a concern.
+      if (initialized_.count(name) && !initialized_.at(name)) {
+        this->InitSubModule(name);
+        initialized_[name] = true;
+      }
 
-    // Run the module.
-    // Normally we would only have a limited number of submodules. The runtime
-    // symobl lookup overhead should be minimal.
-    CHECK(!this->imports().empty());
-    for (Module it : this->imports()) {
-      PackedFunc pf = it.GetFunction(name);
-      if (pf != nullptr) return pf;
+      // Run the module.
+      // Normally we would only have a limited number of submodules. The runtime
+      // symbol lookup overhead should be minimal.
+      CHECK(!this->imports().empty());
+      for (Module it : this->imports()) {
+        PackedFunc pf = it.GetFunction(name);
+        if (pf != nullptr) return pf;
+      }
+      return PackedFunc(nullptr);
     }
-    return PackedFunc(nullptr);
   }
 
   const char* type_key() const { return "metadata"; }

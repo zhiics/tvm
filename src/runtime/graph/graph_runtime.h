@@ -28,6 +28,8 @@
 #include <dlpack/dlpack.h>
 #include <dmlc/json.h>
 #include <dmlc/memory_io.h>
+#include <sched.h>
+#include <tvm/runtime/container.h>
 #include <tvm/runtime/ndarray.h>
 #include <tvm/runtime/packed_func.h>
 
@@ -111,13 +113,13 @@ class TVM_DLL GraphRuntime : public ModuleNode {
    * \param index The input index.
    * \param data_in The input data.
    */
-  void SetInput(int index, DLTensor* data_in);
+  void SetInput(int index, const DLTensor* data_in);
   /*!
    * \brief set index-th input to the graph without copying the data
    * \param index The input index.
    * \param data_ref The input data that is referred.
    */
-  void SetInputZeroCopy(int index, DLTensor* data_ref);
+  void SetInputZeroCopy(int index, const DLTensor* data_ref);
   /*!
    * \brief Get the number of outputs
    *
@@ -360,6 +362,8 @@ class TVM_DLL GraphRuntime : public ModuleNode {
   void SetupStorage();
   /*! \brief Setup the executors. */
   void SetupOpExecs();
+  /*! \brief Setup the inputs including constant pool for parameters. */
+  void SetupInputs();
   /*!
    * \brief Create an execution function given input.
    * \param attrs The node attributes.
@@ -401,6 +405,8 @@ class TVM_DLL GraphRuntime : public ModuleNode {
   std::vector<size_t> data_alignment_;
   /*! \brief Operator on each node. */
   std::vector<std::function<void()>> op_execs_;
+  /*! \brief The list of constants/parameters. */
+  Array<String> params_;
 };
 
 std::vector<TVMContext> GetAllContext(const TVMArgs& args);

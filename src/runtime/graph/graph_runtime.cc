@@ -74,11 +74,7 @@ void GraphRuntime::Init(const std::string& graph_json, tvm::runtime::Module modu
   ctxs_ = ctxs;
   this->SetupStorage();
   this->SetupOpExecs();
-  for (size_t i = 0; i < input_nodes_.size(); i++) {
-    const uint32_t nid = input_nodes_[i];
-    std::string& name = nodes_[nid].name;
-    input_map_[name] = i;
-  }
+  this->SetupInputs();
 }
 /*!
  * \brief Get the input index given the name of input.
@@ -98,7 +94,7 @@ int GraphRuntime::GetInputIndex(const std::string& name) {
  * \param index The input index.
  * \param data_in The input data.
  */
-void GraphRuntime::SetInput(int index, DLTensor* data_in) {
+void GraphRuntime::SetInput(int index, const DLTensor* data_in) {
   CHECK_LT(static_cast<size_t>(index), input_nodes_.size());
   uint32_t eid = this->entry_id(input_nodes_[index], 0);
   data_entry_[eid].CopyFrom(data_in);
@@ -108,7 +104,7 @@ void GraphRuntime::SetInput(int index, DLTensor* data_in) {
  * \param index The input index.
  * \param data_ref The input data that is referred.
  */
-void GraphRuntime::SetInputZeroCopy(int index, DLTensor* data_ref) {
+void GraphRuntime::SetInputZeroCopy(int index, const DLTensor* data_ref) {
   CHECK_LT(static_cast<size_t>(index), input_nodes_.size());
   uint32_t eid = this->entry_id(input_nodes_[index], 0);
   const DLTensor* old_t = data_entry_[eid].operator->();
@@ -234,6 +230,41 @@ void GraphRuntime::ShareParams(const GraphRuntime& other, dmlc::Stream* strm) {
   this->SetupOpExecs();
 }
 
+void GraphRuntime::SetupInputs() {
+  for (size_t i = 0; i < input_nodes_.size(); i++) {
+    const uint32_t nid = input_nodes_[i];
+    std::string& name = nodes_[nid].name;
+    std::string& op_type = nodes_[nid].op_type;
+    input_map_[name] = i;
+    // Save the constant params
+    if (op_type == "const") {
+      params_.push_back(name);
+    }
+  }
+
+  // Load constants from the wrapped metadata module
+  auto pf = module_.GetFunction("get_params");
+  CHECK(pf != nullptr)
+      << "Cannot find get_params in the submodule. Make sure metadata module is wrapped";
+  Array<NDArray> consts = pf(params_);
+  CHECK_EQ(params_.size(), consts.size());
+
+  // Setup the constant/weight entries.
+  for (size_t i = 0; i < params_.size(); i++) {
+    int in_idx = GetInputIndex(params_[i]);
+    CHECK_GE(in_idx, 0) << "Found param for non-existent input: " << params_[i];
+    CHECK_LT(static_cast<size_t>(in_idx), input_nodes_.size());
+    uint32_t eid = this->entry_id(input_nodes_[in_idx], 0);
+    // Copy to device since metadata module always saves NDArrays on CPU.
+    if (data_entry_[eid]->ctx.device_type != consts[i]->ctx.device_type) {
+      this->SetInput(in_idx, consts[i].operator->());
+    } else {
+      // Zero copy
+      this->SetInputZeroCopy(in_idx, consts[i].operator->());
+    }
+  }
+}
+
 void GraphRuntime::SetupStorage() {
   // Grab saved optimization plan from graph.
   std::vector<DLDataType> vtype;
@@ -311,7 +342,9 @@ void GraphRuntime::SetupOpExecs() {
   // setup the array and requirements.
   for (uint32_t nid = 0; nid < this->GetNumOfNodes(); ++nid) {
     const auto& inode = nodes_[nid];
-    if (inode.op_type == "null") continue;
+    // "null" is checked for backward compatibility. It will be removed in the
+    // next release cycle. This would require users to recompile their models.
+    if (inode.op_type == "null" || inode.op_type == "input" || inode.op_type == "const") continue;
     std::vector<DLTensor> args;
     for (const auto& e : inode.inputs) {
       uint32_t eid = this->entry_id(e);

@@ -100,6 +100,7 @@ class GraphNode {
  public:
   int num_outputs_{1};
   std::string name_;
+  std::string op_type_name_;
   GraphAttrs attrs_;
 };
 
@@ -107,24 +108,26 @@ class GraphNode {
 class GraphInputNode : public GraphNode {
  public:
   GraphInputNode() {}
-  GraphInputNode(const std::string& name, const GraphAttrs& attrs) {
+  GraphInputNode(const std::string& op_type_name, const std::string& name,
+                 const GraphAttrs& attrs) {
     name_ = name;
+    op_type_name_ = op_type_name;
     attrs_ = attrs;
   }
 
   GraphNodeType Type() const override { return kGraphInputNode; }
 
   void Save(dmlc::JSONWriter* writer) const override {
-    const std::string op_name{"null"};
     writer->BeginObject();
-    writer->WriteObjectKeyValue("op", op_name);
+    writer->WriteObjectKeyValue("op", op_type_name_);
     writer->WriteObjectKeyValue("name", this->name_);
     writer->WriteObjectKeyValue("inputs", std::list<int>());
     writer->EndObject();
   }
-  static std::shared_ptr<GraphNode> make_node_ptr(const std::string& name,
+  static std::shared_ptr<GraphNode> make_node_ptr(const std::string& op_type_name,
+                                                  const std::string& name,
                                                   const GraphAttrs& attrs) {
-    auto ptr = std::make_shared<GraphInputNode>(name, attrs);
+    auto ptr = std::make_shared<GraphInputNode>(op_type_name, name, attrs);
     return std::dynamic_pointer_cast<GraphNode>(ptr);
   }
 };
@@ -136,6 +139,7 @@ class GraphOpNode : public GraphNode {
   GraphOpNode(const std::string& name, const GraphAttrs& nd_attrs, const std::string& op_name,
               const std::vector<GraphNodeRef>& inputs, const GraphAttrs& attrs,
               size_t num_outputs = 1) {
+    op_type_name_ = "tvm_op";
     name_ = name;
     attrs_ = nd_attrs;
     op_name_ = op_name;
@@ -176,9 +180,6 @@ class GraphOpNode : public GraphNode {
   std::string op_name_;
   std::vector<GraphNodeRef> inputs_;
   GraphAttrs op_attrs_;
-
- private:
-  const std::string op_type_name_{"tvm_op"};
 };
 
 /*! \brief Code generator for graph runtime */
@@ -194,7 +195,7 @@ class GraphRuntimeCodegen : public backend::MemoizedExprTranslator<std::vector<G
     storage_device_map_ = (*pf)(func);
     // First we convert all the parameters into input nodes.
     for (auto param : func->params) {
-      auto node_ptr = GraphInputNode::make_node_ptr(param->name_hint(), GraphAttrs());
+      auto node_ptr = GraphInputNode::make_node_ptr("input", param->name_hint(), GraphAttrs());
       var_map_[param.get()] = AddNode(node_ptr, param);
     }
     heads_ = VisitExpr(func->body);
@@ -313,7 +314,7 @@ class GraphRuntimeCodegen : public backend::MemoizedExprTranslator<std::vector<G
     size_t index = params_.size();
     std::string name = "p" + std::to_string(index);
     params_[name] = op->data;
-    auto node = GraphInputNode::make_node_ptr(name, GraphAttrs());
+    auto node = GraphInputNode::make_node_ptr("const", name, GraphAttrs());
     return AddNode(node, expr);
   }
 
