@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -44,6 +45,50 @@ using namespace tvm::runtime;
 namespace tvm {
 namespace runtime {
 namespace vm {
+
+std::string GetInstrName(size_t i) {
+  switch (i) {
+    case 0:
+      return "Move";
+    case 1:
+      return "Ret";
+    case 2:
+      return "Invoke";
+    case 3:
+      return "InvokeClosure";
+    case 4:
+      return "InvokePacked";
+    case 5:
+      return "AllocTensor";
+    case 6:
+      return "AllocTensorReg";
+    case 7:
+      return "AllocADT";
+    case 8:
+      return "AllocClosure";
+    case 9:
+      return "GetField";
+    case 10:
+      return "If";
+    case 11:
+      return "LoadConst";
+    case 12:
+      return "Goto";
+    case 13:
+      return "GetTag";
+    case 14:
+      return "LoadConsti";
+    case 15:
+      return "Fatal";
+    case 16:
+      return "AllocStorage";
+    case 17:
+      return "ShapeOf";
+    default:
+      LOG(FATAL) << "invalid instruction: " << i;
+      return "";
+  }
+}
 
 VMClosure::VMClosure(size_t func_index, std::vector<ObjectRef> free_vars) {
   auto ptr = make_object<VMClosureObj>();
@@ -720,6 +765,29 @@ PackedFunc VirtualMachine::GetFunction(const std::string& name,
       inputs_.erase(func_name);
       inputs_.emplace(func_name, func_args);
     });
+  } else if (name == "reset") {
+    return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+      for (size_t i = 0; i < time_.size(); i++) {
+        time_[i].first = 0;
+        time_[i].second = 0.0;
+      }
+    });
+  } else if (name == "print_time") {
+    return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+      double time_sum = 0.0;
+      int inst_sum = 0;
+      for (size_t i = 0; i < time_.size(); i++) {
+        inst_sum += time_[i].first;
+        time_sum += time_[i].second;
+      }
+      std::cout << "total inst cnt: " << inst_sum << ", total time: " << time_sum << std::endl;
+      for (size_t i = 0; i < time_.size(); i++) {
+        std::string name = GetInstrName(i);
+        std::cout << std::left << std::setw(15) << name << std::setw(8) << time_[i].first
+                  << std::setw(15) << time_[i].second << time_[i].second / time_sum * 100 << "%"
+                  << std::endl;
+      }
+    });
   } else {
     LOG(FATAL) << "Unknown packed function: " << name;
     return PackedFunc([sptr_to_self, name](TVMArgs args, TVMRetValue* rv) {});
@@ -893,12 +961,15 @@ void VirtualMachine::RunLoop() {
   pc_ = 0;
   Index frame_start = frames_.size();
   while (true) {
-  main_loop:
+    std::chrono::time_point<std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin,
+                tend;
     auto const& instr = code_[this->pc_];
     DLOG(INFO) << "Executing(" << pc_ << "): " << instr;
 #if USE_RELAY_DEBUG
     InstructionPrint(std::cout, instr);
 #endif  // USE_RELAY_DEBUG
+
+    tbegin = std::chrono::high_resolution_clock::now();
 
     switch (instr.op) {
       case Opcode::Move: {
@@ -1104,6 +1175,13 @@ void VirtualMachine::RunLoop() {
         }
       }
     }
+  main_loop:
+    tend = std::chrono::high_resolution_clock::now();
+
+    double diff =
+        std::chrono::duration_cast<std::chrono::duration<double>>(tend - tbegin).count() * 1000;
+    time_[static_cast<int>(instr.op)].first++;
+    time_[static_cast<int>(instr.op)].second += diff;
   }
 }
 

@@ -949,6 +949,7 @@ IRModule VMCompiler::OptimizeModule(const IRModule& mod, const TargetsMap& targe
 
   pass_seqs.push_back(transform::CombineParallelConv2D(3));
   pass_seqs.push_back(transform::CombineParallelDense(3));
+  pass_seqs.push_back(transform::CombineParallelBatchMatmul(3));
   pass_seqs.push_back(transform::FoldConstant());
   pass_seqs.push_back(transform::FoldScaleAxis());
   pass_seqs.push_back(transform::CanonicalizeCast());
@@ -959,6 +960,8 @@ IRModule VMCompiler::OptimizeModule(const IRModule& mod, const TargetsMap& targe
     pass_seqs.push_back(transform::AlterOpLayout());
   }
 
+  // Fast math optimizations.
+  pass_seqs.push_back(transform::FastMath());
   pass_seqs.push_back(transform::FoldConstant());
 
   pass_seqs.push_back(transform::FuseOps());

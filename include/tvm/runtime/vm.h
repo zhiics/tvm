@@ -34,6 +34,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <array>
 
 namespace tvm {
 namespace runtime {
@@ -803,6 +804,8 @@ class VirtualMachine : public runtime::ModuleNode {
    * object to avoid rellocation of constants during inference.
    */
   std::vector<ObjectRef> const_pool_;
+
+  std::array<std::pair<int, double>, 18> time_;
 };
 
 }  // namespace vm

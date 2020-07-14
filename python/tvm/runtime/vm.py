@@ -285,6 +285,8 @@ class VirtualMachine(object):
         self._init = self.mod["init"]
         self._invoke = self.mod["invoke"]
         self._set_input = self.mod["set_input"]
+        self._reset = self.mod["reset"]
+        self._print_time = self.mod["print_time"]
 
     def init(self, ctx):
         """Initialize the context in the VM.
@@ -372,3 +374,9 @@ class VirtualMachine(object):
             The output.
         """
         return self.invoke("main", *args, **kwargs)
+
+    def reset(self):
+        return self._reset()
+
+    def print_time(self):
+        return self._print_time()
