@@ -806,6 +806,8 @@ class VirtualMachine : public runtime::ModuleNode {
   std::vector<ObjectRef> const_pool_;
 
   std::array<std::pair<int, double>, 18> time_;
+
+  bool warmed_up_;
 };
 
 }  // namespace vm

@@ -729,6 +729,7 @@ PackedFunc VirtualMachine::GetFunction(const std::string& name,
         CHECK(it != inputs_.end()) << "Input has not been set for function " << func_name;
         const std::vector<ObjectRef>& func_args = it->second;
         *rv = Invoke(func, func_args);
+        warmed_up_ = true;
       }
     });
   } else if (name == "init") {
@@ -820,16 +821,18 @@ Index VirtualMachine::PopFrame() {
   code_ = fr.code;
   pc_ = fr.pc;
   auto call_stack_size = frames_.size();
-  frames_.pop_back();
+  // frames_.pop_back();
   return call_stack_size;
 }
 
 void VirtualMachine::InvokeGlobal(const VMFunction& func, const std::vector<ObjectRef>& args) {
   DLOG(INFO) << "Invoking global " << func.name << " " << args.size();
 
-  PushFrame(func.params.size(), this->pc_ + 1, func);
-  for (size_t i = 0; i < args.size(); ++i) {
-    WriteRegister(i, args[i]);
+  if (!warmed_up_) {
+    PushFrame(func.params.size(), this->pc_ + 1, func);
+    for (size_t i = 0; i < args.size(); ++i) {
+      WriteRegister(i, args[i]);
+    }
   }
   DLOG(INFO) << "func.params= " << func.params.size();
 
@@ -1085,18 +1088,20 @@ void VirtualMachine::RunLoop() {
         goto main_loop;
       }
       case Opcode::AllocTensor: {
-        auto shape = std::vector<int64_t>(instr.alloc_tensor.ndim);
+        if (!warmed_up_) {
+          auto shape = std::vector<int64_t>(instr.alloc_tensor.ndim);
 
-        for (uint32_t i = 0; i < instr.alloc_tensor.ndim; ++i) {
-          shape[i] = instr.alloc_tensor.shape[i];
+          for (uint32_t i = 0; i < instr.alloc_tensor.ndim; ++i) {
+            shape[i] = instr.alloc_tensor.shape[i];
+          }
+
+          auto storage_obj = ReadRegister(instr.alloc_tensor.storage);
+          auto offset = LoadScalarInt(instr.alloc_tensor.offset);
+          auto storage = Downcast<Storage>(storage_obj);
+          auto obj = storage->AllocNDArray(offset, shape, instr.alloc_tensor.dtype);
+
+          WriteRegister(instr.dst, obj);
         }
-
-        auto storage_obj = ReadRegister(instr.alloc_tensor.storage);
-        auto offset = LoadScalarInt(instr.alloc_tensor.offset);
-        auto storage = Downcast<Storage>(storage_obj);
-        auto obj = storage->AllocNDArray(offset, shape, instr.alloc_tensor.dtype);
-
-        WriteRegister(instr.dst, obj);
         pc_++;
         goto main_loop;
       }
@@ -1136,14 +1141,16 @@ void VirtualMachine::RunLoop() {
         goto main_loop;
       }
       case Opcode::AllocStorage: {
-        auto size = LoadScalarInt(instr.alloc_storage.allocation_size);
-        auto alignment = instr.alloc_storage.alignment;
+        if (!warmed_up_) {
+          auto size = LoadScalarInt(instr.alloc_storage.allocation_size);
+          auto alignment = instr.alloc_storage.alignment;
 
-        DLOG(INFO) << "AllocStorage: allocation_size=" << size << "alignment=" << alignment
-                   << "dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint);
+          DLOG(INFO) << "AllocStorage: allocation_size=" << size << "alignment=" << alignment
+                     << "dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint);
 
-        auto storage = make_storage(size, alignment, instr.alloc_storage.dtype_hint, ctxs_[0]);
-        WriteRegister(instr.dst, storage);
+          auto storage = make_storage(size, alignment, instr.alloc_storage.dtype_hint, ctxs_[0]);
+          WriteRegister(instr.dst, storage);
+        }
         pc_++;
         goto main_loop;
       }
@@ -1164,15 +1171,14 @@ void VirtualMachine::RunLoop() {
         // running, we should return to the caller breaking
         // the dispatch loop.
         return_register_ = ReadRegister(instr.result);
-        auto caller_return_register = frames_.back().caller_return_register;
+        tend = std::chrono::high_resolution_clock::now();
 
-        if (PopFrame() == frame_start) {
-          return;
-          // Otherwise we are just returning from a local call.
-        } else {
-          WriteRegister(caller_return_register, return_register_);
-          goto main_loop;
-        }
+        double diff =
+            std::chrono::duration_cast<std::chrono::duration<double>>(tend - tbegin).count() * 1000;
+        time_[static_cast<int>(instr.op)].first++;
+        time_[static_cast<int>(instr.op)].second += diff;
+
+        return;
       }
     }
   main_loop:
