@@ -373,6 +373,13 @@ inline TargetKindRegEntry& TargetKindRegEntry::set_name() {
           .add_attr_option<String>("model")                       \
           .add_attr_option<Array<String>>("libs")
 
+#define TVM_REGISTER_ACCEL_TARGET_KIND(AccelTargetKindName)         \
+  TVM_STR_CONCAT(TVM_TARGET_KIND_REGISTER_VAR_DEF, __COUNTER__) =   \
+      ::tvm::TargetKindRegEntry::RegisterOrGet(AccelTargetKindName) \
+          .set_name()                                               \
+          .add_attr_option<Array<String>>("keys")                   \
+          .add_attr_option<String>("tag")
+
 }  // namespace tvm
 
 #endif  // TVM_TARGET_TARGET_KIND_H_

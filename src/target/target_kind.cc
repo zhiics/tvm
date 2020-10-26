@@ -301,4 +301,8 @@ TVM_REGISTER_TARGET_KIND("composite", kDLCPU)
     .add_attr_option<Target>("target_host")
     .add_attr_option<Array<Target>>("devices");
 
+TVM_REGISTER_ACCEL_TARGET_KIND("arm_compute_library")
+    .add_attr_option<Array<String>>("pre-passes")
+    .add_attr_option<Array<String>>("post-passes");
+
 }  // namespace tvm

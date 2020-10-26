@@ -74,4 +74,13 @@ TVM_REGISTER_TARGET_TAG("nvidia/rtx2080ti")
         {"arch", String("sm_75")},
     });
 
+TVM_REGISTER_TARGET_TAG("arm/arm_compute_library")
+    .set_config({
+        {"kind", String("composite")},
+        {"target_host", String("llvm")},
+        {"devices", Map<String, String>{{"kind", "arm_compute_library"}}},
+        {"pre-passes", Array<String>{"AnnotateTarget", "PartitionGraph"}},
+        {"post-passes", Array<String>{"optimize"}},
+    });
+
 }  // namespace tvm
