@@ -20,13 +20,33 @@ set -e
 set -u
 set -o pipefail
 
-v=3.15
-version=3.15.7
-wget https://cmake.org/files/v${v}/cmake-${version}.tar.gz
-tar xvf cmake-${version}.tar.gz
-cd cmake-${version}
-./bootstrap
-make -j$(nproc)
-make install
-cd ..
-rm -rf cmake-${version} cmake-${version}.tar.gz
+WORKDIR=/mlir
+mkdir ${WORKDIR}
+cd ${WORKDIR}
+LLVMDIR=${WORKDIR}/llvm-project
+LLVMBUILD=${WORKDIR}/llvm-build
+MLIRDIR=${WORKDIR}/mlir-hlo
+
+apt-get update && apt-get install -y ninja-build lld
+
+# Install llvm-project from source
+git clone https://github.com/llvm/llvm-project.git
+mkdir ${LLVMBUILD}
+
+# Install mlir
+cd ${WORKDIR}
+git clone https://github.com/tensorflow/mlir-hlo.git
+cd ${LLVMDIR}
+git checkout $(cat ${MLIRDIR}/build_tools/llvm_version.txt)
+cd ${MLIRDIR}
+chmod +x build_tools/build_mlir.sh
+
+build_tools/build_mlir.sh ${LLVMDIR} ${LLVMBUILD}
+
+mkdir build && cd build
+
+cmake .. -GNinja \
+  -DLLVM_ENABLE_LLD=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DLLVM_ENABLE_ASSERTIONS=On \
+  -DMLIR_DIR=${LLVMBUILD}/lib/cmake/mlir
