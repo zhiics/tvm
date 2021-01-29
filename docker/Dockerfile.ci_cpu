@@ -102,6 +102,6 @@ RUN bash /install/ubuntu_install_vitis_ai_packages_ci.sh
 
 # MLIR deps
 COPY install/ubuntu_install_cmake_source.sh /install/ubuntu_install_cmake_source.sh
-RUN bash /install/ubuntu_install_cmake_source.sh
+RUN bash /install/ubuntu_install_cmake_source.sh -v 3 -m 15 -n 7
 COPY install/ubuntu_install_mlir.sh /install/ubuntu_install_mlir.sh
 RUN bash /install/ubuntu_install_mlir.sh

@@ -20,8 +20,28 @@ set -e
 set -u
 set -o pipefail
 
-v=3.15
-version=3.15.7
+while getopts ":v:m:n:" opt; do
+  case $opt in
+    v) ver="${OPTARG}"
+    ;;
+    m) major="${OPTARG}"
+    ;;
+    n) minor="${OPTARG}"
+    ;;
+    \?) echo "Invalid option -${OPTARG}"
+    ;;
+  esac
+done
+
+if [ -z ${ver+x} ] && [ -z ${major+x} ] && [ -z ${minor+x} ]; then
+	v=3.13
+	version=3.13.5
+else
+	v=${ver}.${major}
+	version=${ver}.${major}.${minor}
+	echo "Install cmake ${version}"
+fi
+
 wget https://cmake.org/files/v${v}/cmake-${version}.tar.gz
 tar xvf cmake-${version}.tar.gz
 cd cmake-${version}
