@@ -27,7 +27,9 @@ LLVMDIR=${WORKDIR}/llvm-project
 LLVMBUILD=${WORKDIR}/llvm-build
 MLIRDIR=${WORKDIR}/mlir-hlo
 
-apt-get update && apt-get install -y ninja-build lld
+apt-get update && apt-get install -y ninja-build lld-9
+ln -s /usr/bin/lld-9 /usr/bin/lld
+ln -s /usr/bin/ld.lld-9 /usr/bin/ld.lld
 
 # Install llvm-project from source
 git clone https://github.com/llvm/llvm-project.git
